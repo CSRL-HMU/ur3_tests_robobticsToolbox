@@ -2,15 +2,27 @@ import roboticstoolbox as rt
 import numpy as np
 import scipy as sp
 import spatialmath as sm
-import rtde_control
 import rtde_receive
+import rtde_control
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import math
+import time
+
+rtde_c = rtde_control.RTDEControlInterface("192.168.1.60")
+rtde_r = rtde_receive.RTDEReceiveInterface("192.168.1.60")
+
+init_q = rtde_r.getActualQ()
 
 
+# rtde_r = rtde_receive.RTDEReceiveInterface("127.0.0.1")
+# rtde_frequency = 500.0
+# rtde_c = RTDEControl("127.0.0.1", rtde_frequency, RTDEControl.FLAG_USE_EXT_UR_CAP)
 
 
-simEnable = True
+pi = math.pi
+
+simEnable = False
 visEnable = True
 framerate = 30.0
 
@@ -20,8 +32,18 @@ rng = np.random.default_rng()
 ur = rt.models.UR3()
 
 # Initialization
-q0 = np.array(rng.standard_normal(6))
+
+if simEnable:
+    q0 = np.array([0.0 , 0.5 , pi/4 , 0.6 , -pi/3 ,  1])
+    q0 = np.array(rtde_r.getActualQ())
+else:
+    q0 = np.array(rtde_r.getActualQ())
+
+
+
 q = q0
+
+print(q)
 
 dt_sim = 0.001
 dt_real = 0.002
@@ -45,10 +67,16 @@ k = 4.0
 tlog = t
 elog = p0 -pT
 
+t_now = time.time()
 
 for i in tqdm(range(5000)):
 
-    
+    print(time.time() - t_now)
+    t_now =  time.time()
+    t_start = rtde_c.initPeriod()
+
+    actual_q = rtde_r.getActualQ()
+    # print(actual_q)
 
 
     if simEnable:
@@ -64,7 +92,7 @@ for i in tqdm(range(5000)):
         t_vis = t_vis + dt_real
 
         # Get joint values
-        #q = rtde ... 
+        q = np.array(rtde_r.getActualQ())
 
     g = ur.fkine(q)
     R = g.R
@@ -74,9 +102,10 @@ for i in tqdm(range(5000)):
 
     v = np.concatenate(( - k * (p - pT) , np.zeros(3) ))
 
-    qdot = np.linalg.inv(J) @ v 
+    qdot = 0.0*np.linalg.inv(J) @ v
 
-
+    if simEnable==0:
+        rtde_c.speedJ(qdot, 1.0, dt_real)
 
     tlog = np.vstack((tlog,t))
     elog = np.vstack((elog,p-pT))
@@ -88,6 +117,13 @@ for i in tqdm(range(5000)):
             qlog = np.vstack((qlog,q))
             t_vis = 0.0
 
+    rtde_c.waitPeriod(t_start)
+
+    f = rtde_r.getActualTCPForce()
+    # print(f)
+
+rtde_c.speedStop()
+rtde_c.stopScript()
     
 
 
